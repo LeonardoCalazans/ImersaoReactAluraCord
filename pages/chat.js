@@ -1,37 +1,63 @@
 import { Box, Text, TextField, Image, Button } from "@skynexui/components";
 import React from "react";
 import appConfig from "../config.json";
+import { useRouter } from "next/router";
+import { createClient } from "@supabase/supabase-js";
+import { ButtonSendSticker } from "../src/components/ButtonSendSticker";
+import MessageList from "../src/components/MessageList";
+
+// Como fazer AJAX: https://medium.com/@omariosouto/entendendo-como-fazer-ajax-com-a-fetchapi-977ff20da3c6
+const SUPABASE_ANON_key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTY0MzQwNjk1NCwiZXhwIjoxOTU4OTgyOTU0fQ.p59iFiQZABTDO7gakJQEh5KbUkvYV5nAh6CJNszMVd0';
+const SUPABASE_URL = 'https://rkjmbcdfiwxjcluipdtd.supabase.co';
+const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_key);
+
+function listeningChanges(newMessage) {
+    return supabaseClient
+      .from('Messages')
+      .on('INSERT', (responseLive) => {
+        newMessage(responseLive.new);
+      })
+      .subscribe();
+}
 
 export default function ChatPage() {
+    const router = useRouter();
+    const userLogin = router.query.username;
     const [message, setMessage] = React.useState("");
-    const [listaDeMessages, setListaDeMessages] = React.useState([]);
+    const [messageList, setMessageList] = React.useState([]);
 
-    /*
-    
-        // Usuário
-    
-        - Usuário digita no campo textarea
-        - Aperta enter para enviar
-        - Tem que adicionar o texto na listagem
-    
-        // Dev
+    const subscription = listeningChanges((newMessage) => {
+        // console.log('Nova mensagem:', newMessage);
+        // console.log('listaDeMensagens:', messageList);
+
+        setMessageList((currentValueMessageList) => {
+        //   console.log('valor Atual Da Lista:', currentValueMessageList);
+          return [
+            newMessage,
+            ...currentValueMessageList,
+          ]
+        });
   
-        - [X] Campo criado
-        - [X] Vamos usar o onChange usa o useState (ter if pra caso seja enter pra limpar a variavel)
-        - [X] Lista de Messages 
-        */
+      return () => {
+        subscription.unsubscribe();
+      }
+    }, []);
 
-    function handleNewMessage(novaMessage) {
-        const message = {
-            id: listaDeMessages.length + 1,
-            from: "leonardoCalazans",
-            texto: novaMessage,
+    function handleNewMessage(newMessage) {
+        const Messages = {
+            from: userLogin,
+            text: newMessage,
         };
-        //chamada de um backend
-        setListaDeMessages([
-            message,
-            ...listaDeMessages
-        ]);
+
+        supabaseClient
+            .from('Messages')
+            .insert([
+                // Tem que ser um objeto com os MESMOS CAMPOS que você escreveu no supabase
+                Messages
+            ])
+            .then(({ data }) => {
+                // console.log('Criando mensagem: ', data);
+            });
         setMessage("");
     }
 
@@ -78,7 +104,7 @@ export default function ChatPage() {
                         padding: "16px",
                     }}
                 >
-                    <MessageList message={listaDeMessages} />
+                    <MessageList message={messageList} />
 
                     <Box
                         as="form"
@@ -98,7 +124,6 @@ export default function ChatPage() {
                                 if (event.key === "Enter") {
                                     event.preventDefault();
                                     handleNewMessage(message);
-                                    console.log('mensagem', message);
                                 }
                             }}
                             placeholder="Insira sua message aqui..."
@@ -114,6 +139,12 @@ export default function ChatPage() {
                                 color: appConfig.theme.colors.neutrals[200],
                             }}
                         />
+                    {/* callback - é sempre uma chamada de retorno */}
+                        <ButtonSendSticker 
+                            onStickerClick={(sticker)=>{
+                                console.log('[USANDO O COMPONENT] Salva esse sticker no banco')
+                                handleNewMessage(`:sticker: ${sticker}`);
+                            }}/>
                     </Box>
                 </Box>
             </Box>
@@ -143,72 +174,5 @@ function Header() {
                 />
             </Box>
         </>
-    );
-}
-
-function MessageList(props) {
-    console.log(props);
-
-    return (
-        <Box
-            tag="ul"
-            styleSheet={{
-                overflow: "hidden",
-                display: "flex",
-                flexDirection: "column-reverse",
-                flex: 1,
-                color: appConfig.theme.colors.neutrals["000"],
-                marginBottom: "16px",
-            }}
-        >
-            {props.message.map((message) => {
-                console.log(message);
-                return (
-                    <Text
-                        key={message?.id}
-                        tag="li"
-                        styleSheet={{
-                            borderRadius: "5px",
-                            padding: "6px",
-                            marginBottom: "12px",
-                            hover: {
-                                backgroundColor: appConfig.theme.colors.neutrals[700],
-                            },
-                        }}
-                    >
-                        <Box
-                            styleSheet={{
-                                marginBottom: "8px",
-                            }}
-                        >
-                            <Image
-                                styleSheet={{
-                                    width: "20px",
-                                    height: "20px",
-                                    borderRadius: "50%",
-                                    display: "inline-block",
-                                    marginRight: "8px",
-                                }}
-                                src={`https://github.com/vanessametonini.png`}
-                            />
-
-                            <Text tag="strong">{message?.from}</Text>
-
-                            <Text
-                                styleSheet={{
-                                    fontSize: "10px",
-                                    marginLeft: "8px",
-                                    color: appConfig.theme.colors.neutrals[300],
-                                }}
-                                tag="span"
-                            >
-                                {new Date().toLocaleDateString()}
-                            </Text>
-                        </Box>
-                        {message?.texto}
-                    </Text>
-                );
-            })}
-        </Box>
     );
 }
